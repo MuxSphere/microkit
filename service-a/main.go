@@ -14,6 +14,7 @@ import (
 	"github.com/MuxSphere/microkit/shared/database"
 	"github.com/MuxSphere/microkit/shared/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	// Initialize database connection
 	db, err := database.NewConnection(cfg.DatabaseURL)
 	if err != nil {
-		l.Fatal("Failed to connect to database", "error", err)
+		l.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer db.Close()
 
@@ -49,9 +50,9 @@ func main() {
 
 	// Start server
 	go func() {
-		l.Info("Starting server", "port", cfg.Port)
+		l.Info("Starting server", zap.String("port", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			l.Fatal("Failed to start server", "error", err)
+			l.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
 
@@ -64,7 +65,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		l.Fatal("Server forced to shutdown", "error", err)
+		l.Fatal("Server forced to shutdown", zap.Error(err))
 	}
 
 	l.Info("Server exiting")
