@@ -50,9 +50,16 @@ func main() {
 
 	// Start server
 	go func() {
-		l.Info("Starting server", zap.String("port", cfg.Port))
+		l.Info("Starting HTTP server", zap.String("port", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			l.Fatal("Failed to start server", zap.Error(err))
+			l.Fatal("Failed to start HTTP server", zap.Error(err))
+		}
+	}()
+
+	// Start gRPC server
+	go func() {
+		if err := startGRPCServer(l, cfg.GRPCPort); err != nil {
+			l.Fatal("Failed to start gRPC server", zap.Error(err))
 		}
 	}()
 
