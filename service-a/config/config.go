@@ -12,6 +12,7 @@ type Config struct {
 	DatabaseURL string
 	LogLevel    string
 	GRPCPort    string
+	RabbitMQURL string
 }
 
 func Load() (*Config, error) {
