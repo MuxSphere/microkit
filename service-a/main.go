@@ -13,6 +13,7 @@ import (
 	"github.com/MuxSphere/microkit/service-a/handlers"
 	"github.com/MuxSphere/microkit/shared/database"
 	"github.com/MuxSphere/microkit/shared/logger"
+	"github.com/MuxSphere/microkit/shared/rabbitmq"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -33,6 +34,28 @@ func main() {
 		l.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer db.Close()
+
+	// Initialize RabbitMQ
+	rabbitMQ, err := rabbitmq.New(cfg.RabbitMQURL, l) // New RabbitMQ initialization
+	if err != nil {
+		l.Fatal("Failed to connect to RabbitMQ", zap.Error(err))
+	}
+	defer rabbitMQ.Close()
+
+	// 1st example: Publish a message
+	err = rabbitMQ.PublishMessage("example_exchange", "example_routing_key", []byte("Hello, RabbitMQ!"))
+	if err != nil {
+		l.Error("Failed to publish message", zap.Error(err))
+	}
+
+	//  2nd example: Consume messages
+	err = rabbitMQ.ConsumeMessages("example_queue", func(body []byte) error {
+		l.Info("Received message", zap.ByteString("body", body))
+		return nil
+	})
+	if err != nil {
+		l.Error("Failed to consume messages", zap.Error(err))
+	}
 
 	// Initialize Gin router
 	r := gin.New()
