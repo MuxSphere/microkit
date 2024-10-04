@@ -11,6 +11,7 @@ type Config struct {
 	Port        string
 	DatabaseURL string
 	LogLevel    string
+	GRPCPort    string
 }
 
 func Load() (*Config, error) {
