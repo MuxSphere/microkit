@@ -1,2 +1,31 @@
 # Ignore environment variables file
 .env
+
+# Ignore IDE and editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Ignore OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Ignore compiled binaries and test files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Ignore dependency directories
+# Uncomment to ignore vendor folder
+# vendor/
