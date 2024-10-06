@@ -12,6 +12,7 @@ import (
 	"github.com/MuxSphere/microkit/service-a/config"
 	"github.com/MuxSphere/microkit/service-a/handlers"
 	"github.com/MuxSphere/microkit/shared/database"
+	"github.com/MuxSphere/microkit/shared/discovery"
 	"github.com/MuxSphere/microkit/shared/logger"
 	"github.com/MuxSphere/microkit/shared/rabbitmq"
 	"github.com/gin-gonic/gin"
@@ -48,7 +49,7 @@ func main() {
 		l.Error("Failed to publish message", zap.Error(err))
 	}
 
-	//  2nd example: Consume messages
+	// 2nd example: Consume messages
 	err = rabbitMQ.ConsumeMessages("example_queue", func(body []byte) error {
 		l.Info("Received message", zap.ByteString("body", body))
 		return nil
@@ -56,6 +57,19 @@ func main() {
 	if err != nil {
 		l.Error("Failed to consume messages", zap.Error(err))
 	}
+
+	// Sets up service discovery
+	sd, err := discovery.NewServiceDiscovery(cfg.ConsulAddr)
+	if err != nil {
+		l.Fatal("Failed to create service discovery client", zap.Error(err))
+	}
+
+	// Register service with Consul
+	err = sd.RegisterService(cfg.ServiceName, cfg.Host, cfg.Port)
+	if err != nil {
+		l.Fatal("Failed to register service with Consul", zap.Error(err))
+	}
+	defer sd.DeregisterService(cfg.ServiceName, cfg.Host, cfg.Port) // Deregister on shutdown
 
 	// Initialize Gin router
 	r := gin.New()
