@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -65,11 +66,16 @@ func main() {
 	}
 
 	// Register service with Consul
-	err = sd.RegisterService(cfg.ServiceName, cfg.Host, cfg.Port)
+	port, err := strconv.Atoi(cfg.Port) // Convert string port to int
+	if err != nil {
+		l.Fatal("Failed to convert port to int", zap.Error(err))
+	}
+
+	err = sd.RegisterService(cfg.ServiceName, cfg.Host, port)
 	if err != nil {
 		l.Fatal("Failed to register service with Consul", zap.Error(err))
 	}
-	defer sd.DeregisterService(cfg.ServiceName, cfg.Host, cfg.Port) // Deregister on shutdown
+	defer sd.DeregisterService(cfg.ServiceName, cfg.Host, port) // Deregister on shutdown
 
 	// Initialize Gin router
 	r := gin.New()
