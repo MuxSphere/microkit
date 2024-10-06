@@ -13,6 +13,7 @@ type Config struct {
 	ServiceBURL string
 	RateLimit   int
 	JWTSecret   string
+	ConsulAddr  string
 }
 
 func Load() (*Config, error) {
@@ -28,6 +29,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("SERVICE_B_URL", "http://service-b:8080")
 	viper.SetDefault("RATE_LIMIT", 100)
 	viper.SetDefault("JWT_SECRET", "your-secret-key")
+	viper.SetDefault("CONSUL_ADDR", "consul:8500")
 
 	var cfg Config
 	cfg.Port = viper.GetString("PORT")
@@ -35,6 +37,7 @@ func Load() (*Config, error) {
 	cfg.ServiceBURL = viper.GetString("SERVICE_B_URL")
 	cfg.RateLimit = viper.GetInt("RATE_LIMIT")
 	cfg.JWTSecret = viper.GetString("JWT_SECRET")
+	cfg.ConsulAddr = viper.GetString("CONSUL_ADDR")
 
 	return &cfg, nil
 }
