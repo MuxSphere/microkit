@@ -113,5 +113,38 @@ services:
     networks:
       - microservices_net
 
+  prometheus:
+    image: prom/prometheus:v2.30.3
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - '9090:9090'
+    depends_on:
+      consul:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      service-a:
+        condition: service_healthy
+      service-b:
+        condition: service_healthy
+    networks:
+      - microservices_net
+
+  grafana:
+    image: grafana/grafana:8.2.2
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - microservices_net
+
 volumes:
   postgres_data:
+  grafana-data:
