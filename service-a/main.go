@@ -17,8 +17,25 @@ import (
 	"github.com/MuxSphere/microkit/shared/logger"
 	"github.com/MuxSphere/microkit/shared/rabbitmq"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
+
+var (
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "endpoint", "status"},
+	)
+)
+
+func init() {
+	// Register Prometheus metrics
+	prometheus.MustRegister(httpRequestsTotal)
+}
 
 func main() {
 	// Initialize configuration
@@ -38,7 +55,7 @@ func main() {
 	defer db.Close()
 
 	// Initialize RabbitMQ
-	rabbitMQ, err := rabbitmq.New(cfg.RabbitMQURL, l) // New RabbitMQ initialization
+	rabbitMQ, err := rabbitmq.New(cfg.RabbitMQURL, l)
 	if err != nil {
 		l.Fatal("Failed to connect to RabbitMQ", zap.Error(err))
 	}
@@ -66,7 +83,7 @@ func main() {
 	}
 
 	// Register service with Consul
-	port, err := strconv.Atoi(cfg.Port) // Convert string port to int
+	port, err := strconv.Atoi(cfg.Port)
 	if err != nil {
 		l.Fatal("Failed to convert port to int", zap.Error(err))
 	}
@@ -77,10 +94,14 @@ func main() {
 	}
 	defer sd.DeregisterService(cfg.ServiceName, cfg.Host, port) // Deregister on shutdown
 
-	// Initialize Gin router
+	// Initialize Gin router and Prometheus middleware
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logger.GinMiddleware(l))
+	r.Use(prometheusMiddleware())
+
+	// Register Prometheus metrics endpoint
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Register routes
 	handlers.RegisterRoutes(r, db, l)
@@ -91,7 +112,7 @@ func main() {
 		Handler: r,
 	}
 
-	// Start server
+	// Start HTTP server
 	go func() {
 		l.Info("Starting HTTP server", zap.String("port", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -106,7 +127,7 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -119,4 +140,14 @@ func main() {
 	}
 
 	l.Info("Server exiting")
+}
+
+// Prometheus middleware to track HTTP requests
+func prometheusMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+
+		status := strconv.Itoa(c.Writer.Status())
+		httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), status).Inc()
+	}
 }
