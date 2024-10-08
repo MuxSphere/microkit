@@ -15,7 +15,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.20'
+        go-version: '1.20'  # Customize Go version if needed
 
     - name: Cache Go modules
       uses: actions/cache@v3
@@ -29,7 +29,7 @@ jobs:
       run: go mod download
 
     - name: Run tests
-      run: ./scripts/run-tests.sh
+      run: ./scripts/run-tests.sh  # Customize test script as needed
 
   build-and-push:
     needs: test
@@ -43,11 +43,12 @@ jobs:
     - name: Login to DockerHub
       uses: docker/login-action@v2
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}  # Add your DockerHub username secret
+        password: ${{ secrets.DOCKERHUB_TOKEN }}     # Add your DockerHub token secret
 
     - name: Build and push images
       run: |
+        # Build and push images for each service in the project structure
         for service in api-gateway service-a service-b; do
           docker build -t your-dockerhub-username/$service:${{ github.sha }} ./$service
           docker push your-dockerhub-username/$service:${{ github.sha }}
@@ -59,28 +60,32 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Deploy to staging
+    - name: Deploy to staging (customize this step)
       run: |
         echo "Deploying to staging environment"
         # Add your deployment script or commands here
-        # This could be running docker-compose on a remote server, 
-        # updating a Kubernetes deployment, etc.
-        # Example:
+        # Options: Docker Compose, Kubernetes, SSH, etc.
+        # Example for Docker Compose:
         # ssh user@your-server 'docker-compose pull && docker-compose up -d'
+        # Example for Kubernetes:
+        # kubectl apply -f k8s/deployment.yaml
 
     - name: Run post-deployment tests
       run: |
         echo "Running post-deployment tests"
         # Add commands to run integration or end-to-end tests here
+        # This could include API tests, UI tests, etc.
 
     - name: Notify on success
       if: success()
       run: |
         echo "Deployment successful"
         # Add notification commands here (e.g., Slack, email)
+        # Example: curl -X POST -H 'Content-type: application/json' --data '{"text":"Deployment successful!"}' $SLACK_WEBHOOK_URL
 
     - name: Notify on failure
       if: failure()
       run: |
         echo "Deployment failed"
         # Add notification commands here (e.g., Slack, email)
+        # Example: curl -X POST -H 'Content-type: application/json' --data '{"text":"Deployment failed!"}' $SLACK_WEBHOOK_URL
