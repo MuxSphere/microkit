@@ -1,0 +1,86 @@
+name: Microservices CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.20'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: ./scripts/run-tests.sh
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and push images
+      run: |
+        for service in api-gateway service-a service-b; do
+          docker build -t your-dockerhub-username/$service:${{ github.sha }} ./$service
+          docker push your-dockerhub-username/$service:${{ github.sha }}
+        done
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment"
+        # Add your deployment script or commands here
+        # This could be running docker-compose on a remote server, 
+        # updating a Kubernetes deployment, etc.
+        # Example:
+        # ssh user@your-server 'docker-compose pull && docker-compose up -d'
+
+    - name: Run post-deployment tests
+      run: |
+        echo "Running post-deployment tests"
+        # Add commands to run integration or end-to-end tests here
+
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "Deployment successful"
+        # Add notification commands here (e.g., Slack, email)
+
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "Deployment failed"
+        # Add notification commands here (e.g., Slack, email)
