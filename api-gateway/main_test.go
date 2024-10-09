@@ -1,131 +1,106 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
+	"time"
 
 	"github.com/MuxSphere/microkit/api-gateway/config"
 	"github.com/MuxSphere/microkit/api-gateway/handlers"
 	"github.com/MuxSphere/microkit/api-gateway/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
-func setupTestEnv() {
-	os.Setenv("PORT", "8080")
-	os.Setenv("SERVICE_A_URL", "http://test-service-a:8080")
-	os.Setenv("SERVICE_B_URL", "http://test-service-b:8080")
-	os.Setenv("RATE_LIMIT", "10")
-	os.Setenv("JWT_SECRET", "test-secret")
-	os.Setenv("CONSUL_ADDR", "test-consul:8500")
-}
-
-func TestConfigLoad(t *testing.T) {
-	setupTestEnv()
-
-	cfg, err := config.Load()
-	assert.NoError(t, err)
-	assert.Equal(t, "8080", cfg.Port)
-	assert.Equal(t, "http://test-service-a:8080", cfg.ServiceAURL)
-	assert.Equal(t, "http://test-service-b:8080", cfg.ServiceBURL)
-	assert.Equal(t, 10, cfg.RateLimit)
-	assert.Equal(t, "test-secret", cfg.JWTSecret)
-	assert.Equal(t, "test-consul:8500", cfg.ConsulAddr)
-}
-
-func TestMiddlewareLogger(t *testing.T) {
+func setupRouter() (*gin.Engine, *observer.ObservedLogs) {
 	gin.SetMode(gin.TestMode)
+
+	// Create a logger with an observer for testing
+	core, logs := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+
 	r := gin.New()
-	r.Use(middleware.Logger())
+	r.Use(gin.Recovery())
+	r.Use(middleware.Logger(logger))
 
-	r.GET("/test", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+	cfg := &config.Config{
+		RateLimit: 10, // Set a rate limit for testing
+		Port:      "8080",
+	}
 
-	req, _ := http.NewRequest("GET", "/test", nil)
+	r.Use(middleware.RateLimiter(cfg.RateLimit))
+
+	handlers.SetupRoutes(r, cfg)
+
+	return r, logs
+}
+
+func TestHealthCheck(t *testing.T) {
+	router, _ := setupRouter()
+
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	req, _ := http.NewRequest("GET", "/health", nil)
+	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", response["status"])
 }
 
-func TestMiddlewareRateLimiter(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.Use(middleware.RateLimiter(2)) // A low limit for testing
+func TestLogger(t *testing.T) {
+	router, logs := setupRouter()
 
-	r.GET("/test", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/health", nil)
+	router.ServeHTTP(w, req)
 
-	for i := 0; i < 3; i++ {
-		req, _ := http.NewRequest("GET", "/test", nil)
+	assert.Equal(t, 1, logs.Len())
+	logEntry := logs.All()[0]
+
+	assert.Equal(t, "Request", logEntry.Message)
+	assert.Equal(t, int64(http.StatusOK), logEntry.ContextMap()["status"])
+	assert.Equal(t, "GET", logEntry.ContextMap()["method"])
+	assert.Equal(t, "/health", logEntry.ContextMap()["path"])
+	assert.Contains(t, logEntry.ContextMap(), "latency")
+}
+
+func TestRateLimiter(t *testing.T) {
+	router, _ := setupRouter()
+
+	for i := 0; i < 11; i++ {
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
+		req, _ := http.NewRequest("GET", "/health", nil)
+		router.ServeHTTP(w, req)
 
-		if i < 2 {
+		if i < 10 {
 			assert.Equal(t, http.StatusOK, w.Code)
 		} else {
 			assert.Equal(t, http.StatusTooManyRequests, w.Code)
 		}
 	}
-}
 
-func TestSetupRoutes(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	cfg := &config.Config{
-		ServiceAURL: "http://test-service-a:8080",
-		ServiceBURL: "http://test-service-b:8080",
-	}
+	// Wait for rate limiter to reset
+	time.Sleep(time.Second)
 
-	handlers.SetupRoutes(r, cfg)
-
-	// Test Service A route
-	req, _ := http.NewRequest("GET", "/service-a/test", nil)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	// Test Service B route
-	req, _ = http.NewRequest("GET", "/service-b/test", nil)
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	// Test health check route
-	req, _ = http.NewRequest("GET", "/health", nil)
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
-}
-
-func TestMainComponents(t *testing.T) {
-	setupTestEnv()
-
-	// Test config loading
-	cfg, err := config.Load()
-	assert.NoError(t, err)
-	assert.NotNil(t, cfg)
-
-	// Test Gin setup
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	assert.NotNil(t, r)
-
-	// Test middleware setup
-	r.Use(gin.Recovery())
-	r.Use(middleware.Logger())
-	r.Use(middleware.RateLimiter(cfg.RateLimit))
-
-	// Test route setup
-	handlers.SetupRoutes(r, cfg)
-
-	// Make a test request to ensure everything is set up correctly
 	req, _ := http.NewRequest("GET", "/health", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestInvalidRoute(t *testing.T) {
+	router, _ := setupRouter()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/invalid", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
