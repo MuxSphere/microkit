@@ -7,6 +7,7 @@ import (
 	"github.com/MuxSphere/microkit/api-gateway/handlers"
 	"github.com/MuxSphere/microkit/api-gateway/middleware"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -16,10 +17,17 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Create a production logger
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Failed to create logger: %v", err)
+	}
+	defer logger.Sync()
+
 	// Set up Gin
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(middleware.Logger())
+	r.Use(middleware.Logger(logger))
 
 	// Add rate limiting middleware
 	r.Use(middleware.RateLimiter(cfg.RateLimit))
@@ -28,8 +36,8 @@ func main() {
 	handlers.SetupRoutes(r, cfg)
 
 	// Start server
-	log.Printf("Starting API Gateway on port %s", cfg.Port)
+	logger.Info("Starting API Gateway", zap.String("port", cfg.Port))
 	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Fatal("Failed to start server", zap.Error(err))
 	}
 }
